@@ -26,6 +26,7 @@ type Response struct {
 // TODO: move to config
 const aliasLength = 6
 
+//go:generate go run github.com/vektra/mockery/v2@v2.43.2 --name=URLSaver
 type URLSaver interface {
 	SaveURL(urlToSave string, alias string) (int64, error)
 }
@@ -66,6 +67,11 @@ func New(log *logger.Logger, urlSaver URLSaver) http.HandlerFunc {
 		if errors.Is(err, storage.ErrURLExists) {
 			log.Info("url already exists", slog.String("url", req.URL))
 			render.JSON(w, r, response.Error("url already exists"))
+			return
+		}
+		if err != nil {
+			log.Error("failed to add url", slog.String("error", err.Error()))
+			render.JSON(w, r, response.Error("failed to add url"))
 			return
 		}
 
