@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"url-shortener/internal/api/handlers/redirect"
-	save "url-shortener/internal/api/handlers/url"
+	"url-shortener/internal/api/handlers/save"
 	mwLogger "url-shortener/internal/api/middleware/logger"
 	"url-shortener/internal/config"
 	"url-shortener/internal/lib/logger"
@@ -33,7 +33,7 @@ func main() {
 	router.Use(middleware.URLFormat)
 	router.Use(mwLogger.New(log))
 
-	router.Post("/url", save.New(log, storage))
+	router.Post("/save", save.New(log, storage))
 	router.Get("/{alias}", redirect.New(log, storage))
 
 	log.Info("starting server", slog.String("address", cfg.Address))

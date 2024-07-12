@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"url-shortener/internal/api/handlers/url/mocks"
+	"url-shortener/internal/api/handlers/save/mocks"
 	"url-shortener/internal/lib/logger/handlers"
 )
 
