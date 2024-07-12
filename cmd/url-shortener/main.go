@@ -5,6 +5,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"log/slog"
 	"net/http"
+	"url-shortener/internal/api/handlers/redirect"
 	save "url-shortener/internal/api/handlers/url"
 	mwLogger "url-shortener/internal/api/middleware/logger"
 	"url-shortener/internal/config"
@@ -33,6 +34,7 @@ func main() {
 	router.Use(mwLogger.New(log))
 
 	router.Post("/url", save.New(log, storage))
+	router.Get("/{alias}", redirect.New(log, storage))
 
 	log.Info("starting server", slog.String("address", cfg.Address))
 
