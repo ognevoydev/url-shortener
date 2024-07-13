@@ -1,14 +1,9 @@
 package main
 
 import (
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"log/slog"
 	"net/http"
-	"url-shortener/internal/api/handlers/delete"
-	"url-shortener/internal/api/handlers/redirect"
-	"url-shortener/internal/api/handlers/save"
-	mwLogger "url-shortener/internal/api/middleware/logger"
+	"url-shortener/internal/api/routes"
 	"url-shortener/internal/config"
 	"url-shortener/internal/lib/logger"
 	"url-shortener/internal/storage/sqlite"
@@ -27,16 +22,7 @@ func main() {
 		log.Fatal("failed to init storage", slog.String("error", err.Error()))
 	}
 
-	router := chi.NewRouter()
-
-	router.Use(middleware.RequestID)
-	router.Use(middleware.Recoverer)
-	router.Use(middleware.URLFormat)
-	router.Use(mwLogger.New(log))
-
-	router.Post("/save", save.New(log, storage))
-	router.Get("/{alias}", redirect.New(log, storage))
-	router.Delete("/{alias}", delete.New(log, storage))
+	router := routes.Setup(log, storage)
 
 	log.Info("starting server", slog.String("address", cfg.Address))
 
