@@ -4,6 +4,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"url-shortener/internal/api/handlers/delete"
+	"url-shortener/internal/api/handlers/login"
 	"url-shortener/internal/api/handlers/redirect"
 	"url-shortener/internal/api/handlers/register"
 	"url-shortener/internal/api/handlers/save"
@@ -27,6 +28,7 @@ func Setup(log *logger.Logger, storage *sqlite.Storage) *chi.Mux {
 
 	// Users
 	router.Post("/register", register.New(log, storage))
+	router.Post("/login", login.New(log, storage))
 
 	return router
 }

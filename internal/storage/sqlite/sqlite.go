@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/mattn/go-sqlite3"
 	_ "github.com/mattn/go-sqlite3"
-	pwd "url-shortener/internal/lib/security/password"
+	"url-shortener/internal/lib/security"
 	"url-shortener/internal/storage"
 )
 
@@ -22,27 +22,43 @@ func New(storagePath string) (*Storage, error) {
 		return nil, fmt.Errorf("%s: %w", fn, err)
 	}
 
-	query, err := db.Prepare(`
-	CREATE TABLE IF NOT EXISTS url (
-		id INTEGER PRIMARY KEY,
-		url TEXT NOT NULL,
-		alias TEXT NOT NULL UNIQUE);
-	CREATE INDEX IF NOT EXISTS idx_alias ON url(alias);
-
-	CREATE TABLE IF NOT EXISTS users (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		username TEXT NOT NULL UNIQUE,
-		password TEXT NOT NULL,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", fn, err)
+	queries := []string{
+		`
+		CREATE TABLE IF NOT EXISTS url (
+			id INTEGER PRIMARY KEY,
+			url TEXT NOT NULL,
+			alias TEXT NOT NULL UNIQUE
+		);
+		CREATE INDEX IF NOT EXISTS idx_alias ON url(alias);
+		`,
+		`
+		CREATE TABLE IF NOT EXISTS users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			username TEXT NOT NULL UNIQUE,
+			password TEXT NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);
+		`,
+		`
+		CREATE TABLE IF NOT EXISTS sessions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			token TEXT NOT NULL UNIQUE,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		);
+		`,
 	}
 
-	_, err = query.Exec()
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", fn, err)
+	for _, query := range queries {
+		query, err := db.Prepare(query)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", fn, err)
+		}
+		_, err = query.Exec()
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", fn, err)
+		}
 	}
 
 	return &Storage{db: db}, nil
@@ -116,12 +132,14 @@ func (s *Storage) DeleteURL(alias string) error {
 func (s *Storage) CreateUser(username string, password string) (int64, error) {
 	const fn = "storage.sqlite.CreateUser"
 
+	// TODO handle user already exists error
+
 	query, err := s.db.Prepare("INSERT INTO users(username, password) VALUES(?, ?)")
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", fn, err)
 	}
 
-	hashedPassword, err := pwd.HashPassword(password)
+	hashedPassword, err := security.HashPassword(password)
 
 	res, err := query.Exec(username, hashedPassword)
 	if err != nil {
@@ -130,6 +148,56 @@ func (s *Storage) CreateUser(username string, password string) (int64, error) {
 			return 0, fmt.Errorf("%s: %w", fn, storage.ErrURLExists)
 		}
 
+		return 0, fmt.Errorf("%s: %w", fn, err)
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", fn, err)
+	}
+
+	return id, nil
+}
+
+func (s *Storage) AuthenticateUser(username string, password string) (int64, error) {
+	const fn = "storage.sqlite.AuthenticateUser"
+
+	query, err := s.db.Prepare("SELECT id, password FROM users WHERE username = ?")
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", fn, err)
+	}
+
+	var userId int64
+	var hashedPassword string
+
+	err = query.QueryRow(username).Scan(&userId, &hashedPassword)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, fmt.Errorf("%s: %w", fn, storage.ErrUserNotFound)
+		}
+
+		return 0, fmt.Errorf("%s: %w", fn, err)
+	}
+
+	auth := security.VerifyPassword(password, hashedPassword)
+	if !auth {
+		return 0, nil
+	}
+
+	return userId, nil
+}
+
+func (s *Storage) CreateSession(userId int64, token string) (int64, error) {
+	const fn = "storage.sqlite.CreateSession"
+
+	query, err := s.db.Prepare("INSERT INTO sessions (user_id, token) VALUES (?, ?)")
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", fn, err)
+	}
+
+	res, err := query.Exec(userId, token)
+	if err != nil {
 		return 0, fmt.Errorf("%s: %w", fn, err)
 	}
 
