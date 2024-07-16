@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/mattn/go-sqlite3"
 	_ "github.com/mattn/go-sqlite3"
+	pwd "url-shortener/internal/lib/security/password"
 	"url-shortener/internal/storage"
 )
 
@@ -22,11 +23,18 @@ func New(storagePath string) (*Storage, error) {
 	}
 
 	query, err := db.Prepare(`
-	CREATE TABLE IF NOT EXISTS url(
+	CREATE TABLE IF NOT EXISTS url (
 		id INTEGER PRIMARY KEY,
 		url TEXT NOT NULL,
 		alias TEXT NOT NULL UNIQUE);
 	CREATE INDEX IF NOT EXISTS idx_alias ON url(alias);
+
+	CREATE TABLE IF NOT EXISTS users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		username TEXT NOT NULL UNIQUE,
+		password TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", fn, err)
@@ -103,4 +111,32 @@ func (s *Storage) DeleteURL(alias string) error {
 	}
 
 	return nil
+}
+
+func (s *Storage) CreateUser(username string, password string) (int64, error) {
+	const fn = "storage.sqlite.CreateUser"
+
+	query, err := s.db.Prepare("INSERT INTO users(username, password) VALUES(?, ?)")
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", fn, err)
+	}
+
+	hashedPassword, err := pwd.HashPassword(password)
+
+	res, err := query.Exec(username, hashedPassword)
+	if err != nil {
+		var sqliteErr sqlite3.Error
+		if errors.As(err, &sqliteErr) && errors.Is(sqliteErr.ExtendedCode, sqlite3.ErrConstraintUnique) {
+			return 0, fmt.Errorf("%s: %w", fn, storage.ErrURLExists)
+		}
+
+		return 0, fmt.Errorf("%s: %w", fn, err)
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", fn, err)
+	}
+
+	return id, nil
 }
